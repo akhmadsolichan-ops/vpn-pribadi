@@ -1,0 +1,5 @@
+{
+  "name": "MikroPanel",
+  "description": "MikroTik Remote Management Web Panel for managing multiple devices via VPN (SSTP/L2TP) with auto script generation and monitoring.",
+  "requestFramePermissions": []
+}
