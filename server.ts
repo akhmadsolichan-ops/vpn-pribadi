@@ -3,11 +3,32 @@ import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
+import { execSync } from "child_process";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const db = new Database("mikropanel.db");
+
+// Helper to sync VPN users to system (chap-secrets)
+const syncVpnUsers = () => {
+  try {
+    const devices = db.prepare("SELECT vpn_username, vpn_password FROM devices").all() as any[];
+    let content = "# MikroPanel VPN Secrets\n";
+    devices.forEach(d => {
+      content += `"${d.vpn_username}" * "${d.vpn_password}" *\n`;
+    });
+    
+    // In production/VPS, this path is usually /etc/ppp/chap-secrets
+    // We'll use a local file for dev, but instructions will point to the real one
+    const secretsPath = process.env.NODE_ENV === "production" ? "/etc/ppp/chap-secrets" : "./chap-secrets.local";
+    fs.writeFileSync(secretsPath, content);
+    console.log(`Synced ${devices.length} VPN users to ${secretsPath}`);
+  } catch (error) {
+    console.error("Failed to sync VPN users:", error);
+  }
+};
 
 // Initialize Database
 db.exec(`
@@ -107,6 +128,7 @@ async function startServer() {
       db.prepare("INSERT INTO logs (device_id, event, details) VALUES (?, ?, ?)")
         .run(info.lastInsertRowid, "DEVICE_CREATED", `New device ${name} registered with IP ${ip_vpn}`);
 
+      syncVpnUsers();
       res.json({ success: true, id: info.lastInsertRowid });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message });
@@ -115,6 +137,7 @@ async function startServer() {
 
   app.delete("/api/devices/:id", (req, res) => {
     db.prepare("DELETE FROM devices WHERE id = ?").run(req.params.id);
+    syncVpnUsers();
     res.json({ success: true });
   });
 
@@ -180,6 +203,7 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    syncVpnUsers(); // Initial sync on startup
   });
 }
 
