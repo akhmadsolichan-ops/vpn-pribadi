@@ -59,8 +59,8 @@ cat <<EOF | sudo tee /etc/xl2tpd/xl2tpd.conf
 port = 1701
 
 [lns default]
-ip range = 10.50.0.100-10.50.0.250
-local ip = 10.50.0.1
+ip range = 10.10.10.10-10.10.10.200
+local ip = 10.10.10.1
 require chap = yes
 refuse pap = yes
 require authentication = yes
