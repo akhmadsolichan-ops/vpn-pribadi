@@ -20,9 +20,9 @@ echo -e "${GREEN}Installing Node.js and VPN dependencies...${NC}"
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs sstp-server xl2tpd strongswan ppp build-essential sqlite3
 
-# 3. Install PM2
-echo -e "${GREEN}Installing PM2 for background process management...${NC}"
-sudo npm install -g pm2
+# 3. Install PM2 and TSX
+echo -e "${GREEN}Installing PM2 and TSX for background process management...${NC}"
+sudo npm install -g pm2 tsx
 
 # 4. Configure SSTP Server
 echo -e "${GREEN}Configuring SSTP Server...${NC}"

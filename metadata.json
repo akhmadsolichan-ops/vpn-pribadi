@@ -1,5 +1,5 @@
 {
-  "name": "MikroPanel",
-  "description": "MikroTik Remote Management Web Panel for managing multiple devices via VPN (SSTP/L2TP) with auto script generation and monitoring.",
+  "name": "MikroPanel NOC",
+  "description": "Futuristic NOC Dashboard for managing multiple MikroTik devices via L2TP/IPSec with automated IP assignment and real-time monitoring.",
   "requestFramePermissions": []
 }

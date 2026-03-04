@@ -9,7 +9,15 @@ This guide will help you deploy the MikroPanel NOC Dashboard to your Ubuntu 24.0
 
 ## 🛠️ One-Click Installation
 
-1. **Connect to your VPS via SSH:**
+1. **Push your code to GitHub:**
+   If you haven't already, push this project to your repository:
+   ```bash
+   git add .
+   git commit -m "Refactor: NOC Dashboard & VPN Architecture"
+   git push origin main
+   ```
+
+2. **Connect to your VPS via SSH:**
    ```bash
    ssh root@103.52.212.143
    ```
