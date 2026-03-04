@@ -31,9 +31,6 @@ interface Device {
   id: number;
   name: string;
   location: string;
-  mikrotik_version: string;
-  vpn_type: string;
-  ip_vpn: string;
   vpn_username: string;
   vpn_password: string;
   status: 'online' | 'offline';
@@ -97,9 +94,6 @@ export default function App() {
   const [newDevice, setNewDevice] = useState({
     name: '',
     location: '',
-    mikrotik_version: 'v7',
-    vpn_type: 'SSTP',
-    ip_vpn: '',
     vpn_username: '',
     vpn_password: ''
   });
@@ -209,9 +203,6 @@ export default function App() {
       setNewDevice({
         name: '',
         location: '',
-        mikrotik_version: 'v7',
-        vpn_type: 'SSTP',
-        ip_vpn: '',
         vpn_username: '',
         vpn_password: ''
       });
@@ -229,29 +220,17 @@ export default function App() {
   };
 
   const generateScript = (device: Device) => {
-    const vpnType = device.vpn_type.toLowerCase();
     const serverAddr = vpnSettings.vpn_server_ip || window.location.hostname;
+    const globalPsk = vpnSettings.global_psk || 'mikropanel-psk';
 
-    if (vpnType === 'sstp') {
-      return `# MikroPanel Remote Access Script (SSTP)
-/interface sstp-client add name=mikropanel-vpn \\
-    connect-to=${serverAddr} \\
-    user=${device.vpn_username} \\
-    password=${device.vpn_password} \\
-    port=443 profile=default-encryption \\
-    disabled=no
-/ip address add address=${device.ip_vpn}/24 interface=mikropanel-vpn comment="MikroPanel Tunnel IP"`;
-    } else {
-      return `# MikroPanel Remote Access Script (L2TP/IPSec)
+    return `# MikroPanel Remote Access Script (L2TP/IPSec)
 /interface l2tp-client add name=mikropanel-vpn \\
     connect-to=${serverAddr} \\
     user=${device.vpn_username} \\
     password=${device.vpn_password} \\
-    use-ipsec=yes ipsec-secret=mikropanel-secret \\
+    use-ipsec=yes ipsec-secret=${globalPsk} \\
     profile=default-encryption \\
-    disabled=no
-/ip address add address=${device.ip_vpn}/24 interface=mikropanel-vpn comment="MikroPanel Tunnel IP"`;
-    }
+    disabled=no`;
   };
 
   const copyToClipboard = (text: string, id: number) => {
@@ -259,24 +238,6 @@ export default function App() {
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
-
-  const suggestNextIp = () => {
-    if (devices.length === 0) return '10.50.0.2';
-    const ips = devices
-      .map(d => d.ip_vpn)
-      .filter(ip => ip.startsWith('10.50.0.'))
-      .map(ip => parseInt(ip.split('.').pop() || '0'))
-      .sort((a, b) => a - b);
-    
-    const lastIp = ips[ips.length - 1] || 1;
-    return `10.50.0.${lastIp + 1}`;
-  };
-
-  useEffect(() => {
-    if (isModalOpen && !newDevice.ip_vpn) {
-      setNewDevice(prev => ({ ...prev, ip_vpn: suggestNextIp() }));
-    }
-  }, [isModalOpen, devices]);
 
   if (!isLoggedIn) {
     return (
@@ -381,7 +342,7 @@ export default function App() {
         <nav className="flex-1 py-6 space-y-1">
           <SidebarItem icon={LayoutDashboard} label="DASHBOARD" active={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); setIsSidebarOpen(false); }} />
           <SidebarItem icon={Router} label="DEVICES" active={activeTab === 'devices'} onClick={() => { setActiveTab('devices'); setIsSidebarOpen(false); }} />
-          <SidebarItem icon={Terminal} label="IP MANAGEMENT" active={activeTab === 'ip-management'} onClick={() => { setActiveTab('ip-management'); setIsSidebarOpen(false); }} />
+          <SidebarItem icon={Terminal} label="VPN USERS" active={activeTab === 'vpn-users'} onClick={() => { setActiveTab('vpn-users'); setIsSidebarOpen(false); }} />
           <SidebarItem icon={ShieldCheck} label="VPN SETTINGS" active={activeTab === 'vpn-settings'} onClick={() => { setActiveTab('vpn-settings'); setIsSidebarOpen(false); }} />
           <SidebarItem icon={Activity} label="SYSTEM LOGS" active={activeTab === 'logs'} onClick={() => { setActiveTab('logs'); setIsSidebarOpen(false); }} />
           <SidebarItem icon={Settings} label="SETTINGS" active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsSidebarOpen(false); }} />
@@ -457,7 +418,7 @@ export default function App() {
                   { label: 'TOTAL DEVICES', value: devices.length, icon: Router, color: 'noc-accent' },
                   { label: 'ONLINE NODES', value: devices.filter(d => d.status === 'online').length, icon: Activity, color: 'noc-online' },
                   { label: 'OFFLINE NODES', value: devices.filter(d => d.status === 'offline').length, icon: X, color: 'noc-offline' },
-                  { label: 'ACTIVE VPN', value: 'SSTP/L2TP', icon: ShieldCheck, color: 'noc-accent' }
+                  { label: 'VPN PROTOCOL', value: 'L2TP/IPSEC', icon: ShieldCheck, color: 'noc-accent' }
                 ].map((stat, i) => (
                   <motion.div 
                     initial={{ opacity: 0, y: 20 }}
@@ -515,21 +476,11 @@ export default function App() {
                         </div>
                         <div className="flex items-center gap-12">
                           <div className="text-right">
-                            <div className="text-xs font-mono text-noc-accent mb-1">{device.ip_vpn}</div>
-                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">VPN ADDRESS</div>
+                            <div className="text-xs font-mono text-noc-accent mb-1">{device.vpn_username}</div>
+                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">VPN IDENTITY</div>
                           </div>
                           <div className="w-32">
                             <StatusBadge status={device.status} />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-1 bg-slate-200 dark:bg-noc-accent/10 rounded-full overflow-hidden">
-                              <motion.div 
-                                animate={{ x: [-32, 32] }}
-                                transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-                                className="w-8 h-full bg-noc-accent/40"
-                              />
-                            </div>
-                            <span className="text-[9px] font-mono text-noc-accent">PING</span>
                           </div>
                         </div>
                       </motion.div>
@@ -569,16 +520,12 @@ export default function App() {
 
                   <div className="space-y-4 mb-8 p-4 bg-slate-50 dark:bg-noc-bg/30 rounded-2xl border border-slate-200 dark:border-noc-accent/5">
                     <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
-                      <span className="text-slate-400 flex items-center gap-2"><Cpu size={14} /> RouterOS</span>
-                      <span className="text-slate-900 dark:text-white">{device.mikrotik_version}</span>
+                      <span className="text-slate-400 flex items-center gap-2"><User size={14} /> Username</span>
+                      <span className="text-slate-900 dark:text-white font-mono">{device.vpn_username}</span>
                     </div>
                     <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
-                      <span className="text-slate-400 flex items-center gap-2"><ShieldCheck size={14} /> Protocol</span>
-                      <span className="text-noc-accent">{device.vpn_type}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
-                      <span className="text-slate-400 flex items-center gap-2"><Terminal size={14} /> Tunnel IP</span>
-                      <span className="font-mono text-noc-accent">{device.ip_vpn}</span>
+                      <span className="text-slate-400 flex items-center gap-2"><Lock size={14} /> Password</span>
+                      <span className="text-noc-accent font-mono">{device.vpn_password}</span>
                     </div>
                   </div>
 
@@ -601,13 +548,13 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'ip-management' && (
+          {activeTab === 'vpn-users' && (
             <div className="glass-card rounded-3xl overflow-hidden neon-border">
               <div className="p-8 border-b border-slate-200 dark:border-noc-accent/10 flex items-center justify-between">
-                <h3 className="text-xl font-display font-bold text-slate-900 dark:text-white uppercase tracking-widest">IP Address Allocation</h3>
+                <h3 className="text-xl font-display font-bold text-slate-900 dark:text-white uppercase tracking-widest">VPN User Allocation</h3>
                 <div className="flex items-center gap-4">
                   <div className="px-4 py-2 bg-noc-accent/10 border border-noc-accent/20 rounded-xl text-[10px] font-bold text-noc-accent uppercase tracking-widest">
-                    Subnet: 10.50.0.0/24
+                    Subnet: 10.10.10.0/24
                   </div>
                 </div>
               </div>
@@ -615,21 +562,19 @@ export default function App() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50/50 dark:bg-white/5">
-                      <th className="p-6 text-[10px] font-bold uppercase tracking-widest text-slate-400">Tunnel IP</th>
+                      <th className="p-6 text-[10px] font-bold uppercase tracking-widest text-slate-400">VPN Username</th>
                       <th className="p-6 text-[10px] font-bold uppercase tracking-widest text-slate-400">Assigned Node</th>
-                      <th className="p-6 text-[10px] font-bold uppercase tracking-widest text-slate-400">Protocol</th>
                       <th className="p-6 text-[10px] font-bold uppercase tracking-widest text-slate-400">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-noc-accent/10">
                     {devices.map(device => (
                       <tr key={device.id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors">
-                        <td className="p-6 font-mono text-noc-accent text-sm">{device.ip_vpn}</td>
+                        <td className="p-6 font-mono text-noc-accent text-sm">{device.vpn_username}</td>
                         <td className="p-6">
                           <div className="font-bold text-slate-900 dark:text-white text-sm">{device.name}</div>
                           <div className="text-[10px] text-slate-400 uppercase tracking-widest">{device.location}</div>
                         </td>
-                        <td className="p-6 text-xs font-bold text-slate-500 uppercase tracking-widest">{device.vpn_type}</td>
                         <td className="p-6">
                           <StatusBadge status={device.status} />
                         </td>
@@ -637,8 +582,8 @@ export default function App() {
                     ))}
                     {devices.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="p-20 text-center text-slate-400 uppercase tracking-widest text-xs">
-                          No active IP allocations detected
+                        <td colSpan={3} className="p-20 text-center text-slate-400 uppercase tracking-widest text-xs">
+                          No active VPN users detected
                         </td>
                       </tr>
                     )}
@@ -659,34 +604,21 @@ export default function App() {
                         <div className="flex items-center gap-3">
                           <div className="p-2 bg-noc-accent/10 text-noc-accent rounded-lg"><Shield size={18} /></div>
                           <div>
-                            <div className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest">SSTP Protocol</div>
-                            <div className="text-[10px] text-slate-400 uppercase tracking-widest">Secure Socket Tunneling</div>
-                          </div>
-                        </div>
-                        <button 
-                          type="button"
-                          onClick={() => setVpnSettings({...vpnSettings, sstp_enabled: vpnSettings.sstp_enabled === 'true' ? 'false' : 'true'})}
-                          className={`w-12 h-6 rounded-full transition-all relative ${vpnSettings.sstp_enabled === 'true' ? 'bg-noc-accent' : 'bg-slate-300 dark:bg-noc-card'}`}
-                        >
-                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${vpnSettings.sstp_enabled === 'true' ? 'left-7' : 'left-1'}`} />
-                        </button>
-                      </div>
-
-                      <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-noc-bg/50 border border-slate-200 dark:border-noc-accent/10 rounded-2xl">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-noc-accent/10 text-noc-accent rounded-lg"><Lock size={18} /></div>
-                          <div>
-                            <div className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest">L2TP/IPSec</div>
+                            <div className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-widest">L2TP/IPSec Protocol</div>
                             <div className="text-[10px] text-slate-400 uppercase tracking-widest">Layer 2 Tunneling Protocol</div>
                           </div>
                         </div>
-                        <button 
-                          type="button"
-                          onClick={() => setVpnSettings({...vpnSettings, l2tp_enabled: vpnSettings.l2tp_enabled === 'true' ? 'false' : 'true'})}
-                          className={`w-12 h-6 rounded-full transition-all relative ${vpnSettings.l2tp_enabled === 'true' ? 'bg-noc-accent' : 'bg-slate-300 dark:bg-noc-card'}`}
-                        >
-                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${vpnSettings.l2tp_enabled === 'true' ? 'left-7' : 'left-1'}`} />
-                        </button>
+                        <div className="px-3 py-1 bg-noc-online/10 text-noc-online border border-noc-online/20 rounded-lg text-[8px] font-bold uppercase tracking-widest">ACTIVE</div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Global IPSec PSK</label>
+                        <input 
+                          type="text" 
+                          className="w-full px-5 py-3 bg-slate-100 dark:bg-noc-bg/50 border border-slate-200 dark:border-noc-accent/10 rounded-2xl focus:border-noc-accent outline-none transition-all font-mono text-sm"
+                          value={vpnSettings.global_psk || ''}
+                          onChange={e => setVpnSettings({...vpnSettings, global_psk: e.target.value})}
+                        />
                       </div>
                     </div>
 
@@ -702,7 +634,7 @@ export default function App() {
                       </div>
                       <div className="p-4 bg-noc-accent/5 border border-noc-accent/10 rounded-2xl">
                         <div className="text-[10px] text-slate-400 uppercase tracking-widest leading-relaxed">
-                          This address will be embedded into generated MikroTik scripts. Ensure port 443 (SSTP) and UDP 500/4500 (L2TP) are open on your firewall.
+                          This address will be embedded into generated MikroTik scripts. Ensure UDP 500/4500 (L2TP/IPSec) are open on your firewall.
                         </div>
                       </div>
                     </div>
@@ -845,42 +777,6 @@ export default function App() {
 
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">RouterOS Version</label>
-                    <select 
-                      className="w-full px-4 py-3 bg-slate-100 dark:bg-noc-bg/50 border border-slate-200 dark:border-noc-accent/10 rounded-2xl outline-none focus:border-noc-accent text-sm transition-all appearance-none"
-                      value={newDevice.mikrotik_version}
-                      onChange={e => setNewDevice({...newDevice, mikrotik_version: e.target.value})}
-                    >
-                      <option value="v6">Legacy (v6)</option>
-                      <option value="v7">Modern (v7)</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Tunnel Protocol</label>
-                    <select 
-                      className="w-full px-4 py-3 bg-slate-100 dark:bg-noc-bg/50 border border-slate-200 dark:border-noc-accent/10 rounded-2xl outline-none focus:border-noc-accent text-sm transition-all appearance-none"
-                      value={newDevice.vpn_type}
-                      onChange={e => setNewDevice({...newDevice, vpn_type: e.target.value})}
-                    >
-                      <option value="SSTP">SSTP (SSL/TLS)</option>
-                      <option value="L2TP">L2TP/IPSec</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Tunnel IP Assignment</label>
-                    <input 
-                      type="text" 
-                      placeholder="10.50.0.x"
-                      required
-                      className="w-full px-4 py-3 bg-slate-100 dark:bg-noc-bg/50 border border-slate-200 dark:border-noc-accent/10 rounded-2xl outline-none focus:border-noc-accent text-sm font-mono transition-all"
-                      value={newDevice.ip_vpn}
-                      onChange={e => setNewDevice({...newDevice, ip_vpn: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">VPN Credentials (User)</label>
                     <input 
                       type="text" 
@@ -890,17 +786,16 @@ export default function App() {
                       onChange={e => setNewDevice({...newDevice, vpn_username: e.target.value})}
                     />
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">VPN Credentials (Key)</label>
-                  <input 
-                    type="text" 
-                    required
-                    className="w-full px-4 py-3 bg-slate-100 dark:bg-noc-bg/50 border border-slate-200 dark:border-noc-accent/10 rounded-2xl outline-none focus:border-noc-accent text-sm transition-all"
-                    value={newDevice.vpn_password}
-                    onChange={e => setNewDevice({...newDevice, vpn_password: e.target.value})}
-                  />
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">VPN Credentials (Key)</label>
+                    <input 
+                      type="text" 
+                      required
+                      className="w-full px-4 py-3 bg-slate-100 dark:bg-noc-bg/50 border border-slate-200 dark:border-noc-accent/10 rounded-2xl outline-none focus:border-noc-accent text-sm transition-all"
+                      value={newDevice.vpn_password}
+                      onChange={e => setNewDevice({...newDevice, vpn_password: e.target.value})}
+                    />
+                  </div>
                 </div>
 
                 <div className="pt-6">

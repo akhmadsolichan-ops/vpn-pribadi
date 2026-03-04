@@ -43,9 +43,6 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
     location TEXT,
-    mikrotik_version TEXT,
-    vpn_type TEXT,
-    ip_vpn TEXT UNIQUE,
     vpn_username TEXT UNIQUE,
     vpn_password TEXT,
     status TEXT DEFAULT 'offline',
@@ -76,6 +73,7 @@ if (!sstpEnabled) {
   db.prepare("INSERT INTO vpn_settings (key, value) VALUES (?, ?)").run("sstp_enabled", "true");
   db.prepare("INSERT INTO vpn_settings (key, value) VALUES (?, ?)").run("l2tp_enabled", "true");
   db.prepare("INSERT INTO vpn_settings (key, value) VALUES (?, ?)").run("vpn_server_ip", "103.52.212.143");
+  db.prepare("INSERT INTO vpn_settings (key, value) VALUES (?, ?)").run("global_psk", "mikropanel-psk");
 }
 
 // Seed admin user if not exists (password: admin123 - in real app use bcrypt)
@@ -117,19 +115,26 @@ async function startServer() {
   });
 
   app.post("/api/devices", (req, res) => {
-    const { name, location, mikrotik_version, vpn_type, ip_vpn, vpn_username, vpn_password } = req.body;
+    const { name, location, vpn_username, vpn_password } = req.body;
     try {
+      // UPSERT logic: If vpn_username exists, update it. Otherwise insert.
       const info = db.prepare(`
-        INSERT INTO devices (name, location, mikrotik_version, vpn_type, ip_vpn, vpn_username, vpn_password)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(name, location, mikrotik_version, vpn_type, ip_vpn, vpn_username, vpn_password);
+        INSERT INTO devices (name, location, vpn_username, vpn_password)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(vpn_username) DO UPDATE SET
+          name = excluded.name,
+          location = excluded.location,
+          vpn_password = excluded.vpn_password
+      `).run(name, location, vpn_username, vpn_password);
       
+      const deviceId = info.lastInsertRowid || db.prepare("SELECT id FROM devices WHERE vpn_username = ?").get(vpn_username).id;
+
       // Log the event
       db.prepare("INSERT INTO logs (device_id, event, details) VALUES (?, ?, ?)")
-        .run(info.lastInsertRowid, "DEVICE_CREATED", `New device ${name} registered with IP ${ip_vpn}`);
+        .run(deviceId, "DEVICE_UPDATED", `Device ${name} (${vpn_username}) registered/updated`);
 
       syncVpnUsers();
-      res.json({ success: true, id: info.lastInsertRowid });
+      res.json({ success: true, id: deviceId });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message });
     }
